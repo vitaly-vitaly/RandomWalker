@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Walker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Comic Sans MS', cursive;
+            background: linear-gradient(45deg, #87CEEB, #FFB6C1, #98FB98);
+            background-size: 400% 400%;
+            animation: gradientShift 8s ease infinite;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        .game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .world {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        
+        .hero {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5em;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: heroFloat 2s ease-in-out infinite;
+            z-index: 10;
+        }
+        
+        .hero.moving {
+            animation: heroJump 0.6s ease-out;
+        }
+        
+        @keyframes heroFloat {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.05); }
+        }
+        
+        @keyframes heroJump {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.2) rotate(5deg); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        .best-score {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-size: 1.2em;
+            padding: 12px 20px;
+            background: rgba(255,215,0,0.3);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .current-position {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-size: 1.8em;
+            padding: 15px 30px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .instructions {
+            position: fixed;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            text-align: center;
+            background: rgba(0,0,0,0.3);
+            padding: 15px 30px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            animation: pulse 2s infinite;
+            opacity: 1;
+            transition: opacity 0.5s ease-out;
+        }
+        
+        .instructions.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 1; }
+        }
+        
+        .speed-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-size: 1.1em;
+            padding: 10px 16px;
+            background: rgba(0,150,255,0.3);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .multiplier {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3em;
+            color: #FFD700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            animation: multiplierPop 1.5s ease-out forwards;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        @keyframes multiplierPop {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0);
+            }
+            50% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.2);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="world" id="world">
+            <div class="hero" id="hero">🦸‍♂️</div>
+        </div>
+        
+        <div class="best-score">🏆 Best: <span id="bestScore">0</span></div>
+        <div class="speed-indicator">⚡ Speed: <span id="speedValue">1</span></div>
+        <div class="current-position">📍 Position: <span id="position">0</span></div>
+        
+        <!-- <div class="instructions" id="instructions">
+            🎯 Tap to move!
+        </div> -->
+    </div>
+
+    <script>
+        class RandomWalkGame {
+            constructor() {
+                this.position = 0;
+                this.bestScore = this.getBestScore();
+                this.maxSpeed = 1;
+                this.world = document.getElementById('world');
+                this.hero = document.getElementById('hero');
+                this.positionEl = document.getElementById('position');
+                this.bestScoreEl = document.getElementById('bestScore');
+                this.speedValueEl = document.getElementById('speedValue');
+                this.instructionsEl = document.getElementById('instructions');
+                
+                // Rate limiting
+                this.lastMoveTime = 0;
+                this.moveDelay = 250; // 0.25 seconds
+                
+                this.hasStarted = false;
+                
+                this.updateUI();
+                this.bindEvents();
+            }
+            
+            getBestScore() {
+                return parseInt(localStorage.getItem('randomWalkBest') || '0');
+            }
+            
+            setBestScore(score) {
+                localStorage.setItem('randomWalkBest', score.toString());
+                this.bestScore = score;
+            }
+            
+            bindEvents() {
+                document.addEventListener('click', (e) => this.handleInput(e));
+                document.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    this.handleInput(e);
+                });
+            }
+            
+            handleInput(e) {
+                const now = Date.now();
+                if (now - this.lastMoveTime < this.moveDelay) {
+                    return; // Ignore input if too soon
+                }
+                
+                if (!this.hasStarted) {
+                    this.hasStarted = true;
+                    this.instructionsEl.classList.add('hidden');
+                }
+                
+                this.lastMoveTime = now;
+                this.moveHero();
+            }
+            
+            getCurrentSpeed() {
+                // return Math.floor(this.bestScore / 10) + 1;
+                if (this.bestScore <= 5) {
+                    return 1;
+                } else if (this.bestScore <= 20) {
+                    return 2;
+                } else if (this.bestScore <= 50) {
+                    return 3;
+                } else if (this.bestScore <= 100) {
+                    return 4;
+                }
+                return 5;
+            }
+            
+            moveHero() {
+                const direction = Math.random() < 0.5 ? -1 : 1;
+                const currentSpeed = this.getCurrentSpeed();
+                
+                // Update max speed if current is higher
+                if (currentSpeed > this.maxSpeed) {
+                    this.maxSpeed = currentSpeed;
+                    this.showMultiplier(`Speed Up! x${this.maxSpeed}`);
+                }
+                
+                this.position += direction * this.maxSpeed;
+                
+                // Add moving animation
+                this.hero.classList.add('moving');
+                setTimeout(() => {
+                    this.hero.classList.remove('moving');
+                }, 600);
+                
+                this.centerHero();
+                this.updateUI();
+                
+                if (Math.abs(this.position) > this.bestScore) {
+                    this.setBestScore(Math.abs(this.position));
+                }
+            }
+            
+            positionToScreenOffset(position) {
+                // Logarithmic scale mapping
+                const screenWidth = window.innerWidth;
+                const absPos = Math.abs(position);
+                const sign = position >= 0 ? -1 : 1;
+                
+                let normalizedPos;
+                if (absPos <= 10) {
+                    normalizedPos = absPos / 10 * (1/6);
+                } else if (absPos <= 100) {
+                    normalizedPos = (1/6) + (absPos - 10) / 90 * (1/6);
+                } else {
+                    normalizedPos = (2/6) + Math.min((absPos - 100) / 900 * (1/6), 1/6);
+                }
+                
+                return -sign * normalizedPos * screenWidth;
+            }
+            
+            centerHero() {
+                const offset = this.positionToScreenOffset(this.position);
+                this.world.style.transform = `translateX(${offset}px)`;
+            }
+            
+            updateUI() {
+                this.positionEl.textContent = this.position;
+                this.bestScoreEl.textContent = this.bestScore;
+                this.speedValueEl.textContent = this.maxSpeed;
+            }
+            
+            showMultiplier(text) {
+                const multiplierEl = document.createElement('div');
+                multiplierEl.className = 'multiplier';
+                multiplierEl.textContent = text;
+                document.body.appendChild(multiplierEl);
+                
+                setTimeout(() => {
+                    if (multiplierEl.parentNode) {
+                        multiplierEl.parentNode.removeChild(multiplierEl);
+                    }
+                }, 1500);
+            }
+        }
+        
+        // Initialize game when page loads
+        window.addEventListener('load', () => {
+            new RandomWalkGame();
+        });
+    </script>
+</body>
+</html>
